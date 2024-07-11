@@ -1,0 +1,13 @@
+{
+    "openreview": {
+        "username": "user@provider",
+        "password": "password",
+        "venue": "ICML.cc/2024/Conference"
+    },
+    "voyageai": {
+        "secret": "top_secret"
+    },
+    "ranking": {
+        "model": "voyage-large-2-instruct"
+    }
+}
