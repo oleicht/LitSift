@@ -8,7 +8,7 @@ def parse_requirements(filename):
 setup(
     name="LitSift",
     version="0.1.0",
-    description="A simple Tkinter application",
+    description="Simple UI to find relevant papers ",
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     author="Oliver Leicht",

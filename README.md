@@ -12,7 +12,7 @@ Simple app that ranks conference papers by relevance to a given query.
 
 
 ### Navigation:
-- You can navigate in the title list you up/down arrow
-- Hitting enter, a pop-up window with the abstract appears
-- You can close the window with Esc
+- you can navigate the title list with up/down arrows
+- hitting enter (or double clicking) on a title, a pop-up window with the abstract appears
+- you can close the pop-up with Esc
 - or download the paper via the button, papers are stored in app/cache/{conference}/downloads
