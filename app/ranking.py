@@ -24,6 +24,13 @@ else:
     raise ValueError(config["ranking"]["model"])
 
 
+client = openreview.api.OpenReviewClient(
+    baseurl="https://api2.openreview.net",
+    username=config["openreview"]["username"],
+    password=config["openreview"]["password"],
+)
+
+
 @lru_cache()
 def get_data():
     venue_str = config["openreview"]["venue"].replace(".", "").replace("/", "-")
@@ -32,11 +39,6 @@ def get_data():
     if cached_data_file.exists():
         return pd.read_parquet(cached_data_file)
 
-    client = openreview.api.OpenReviewClient(
-        baseurl="https://api2.openreview.net",
-        username=config["openreview"]["username"],
-        password=config["openreview"]["password"],
-    )
     all_papers = client.get_all_notes(
         content={"venueid": config["openreview"]["venue"]}
     )
@@ -53,6 +55,10 @@ def get_data():
     df = pd.DataFrame(extracted, columns=["id"] + fields)
     df.to_parquet(cached_data_file)
     return df
+
+
+def get_reviews(paper_id: str):
+    return client.get_notes(forum=paper_id)
 
 
 @lru_cache()

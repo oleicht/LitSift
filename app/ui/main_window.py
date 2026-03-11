@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
 )
 
 from app.ui.paper_list import Paper, PaperListModel, PaperListView
+from app.ui.review_dialog import ReviewDialog
+from app.ui.review_worker import ReviewWorker
 from app.ui.worker import RankingWorker
 
 
@@ -23,6 +25,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("LitSift")
         self.resize(1200, 700)
         self._worker: RankingWorker | None = None
+        self._review_worker: ReviewWorker | None = None
         self._model = PaperListModel()
         self._current_paper: Paper | None = None
         self._build_ui()
@@ -62,6 +65,11 @@ class MainWindow(QMainWindow):
         self._download_btn.clicked.connect(self._on_download)
         right_layout.addWidget(self._download_btn)
 
+        self._reviews_btn = QPushButton("Show Reviews")
+        self._reviews_btn.setEnabled(False)
+        self._reviews_btn.clicked.connect(self._on_reviews)
+        right_layout.addWidget(self._reviews_btn)
+
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 2)
@@ -97,25 +105,48 @@ class MainWindow(QMainWindow):
     def _on_error(self, msg: str) -> None:
         self.statusBar().showMessage(f"Error: {msg}", 8000)
 
-    def _on_selection_changed(self, current, previous) -> None:
+    def _on_selection_changed(self, current, _) -> None:
         paper = self._model.data(current, Qt.ItemDataRole.UserRole)
         self._current_paper = paper
         if paper is not None:
             self._abstract_view.setPlainText(paper.abstract)
             fmt = QTextBlockFormat()
-            fmt.setLineHeight(140, QTextBlockFormat.LineHeightTypes.ProportionalHeight)
+            fmt.setLineHeight(140.0, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
             cursor = self._abstract_view.textCursor()
             cursor.select(QTextCursor.SelectionType.Document)
             cursor.mergeBlockFormat(fmt)
             self._download_btn.setEnabled(True)
+            self._reviews_btn.setEnabled(True)
         else:
             self._abstract_view.clear()
             self._download_btn.setEnabled(False)
+            self._reviews_btn.setEnabled(False)
 
     def _on_model_reset(self) -> None:
         self._current_paper = None
         self._abstract_view.clear()
         self._download_btn.setEnabled(False)
+        self._reviews_btn.setEnabled(False)
+
+    def _on_reviews(self) -> None:
+        if self._review_worker and self._review_worker.isRunning():
+            return
+        self._reviews_btn.setEnabled(False)
+        self.statusBar().showMessage("Loading reviews…")
+        self._review_worker = ReviewWorker(self._current_paper, parent=self)
+        self._review_worker.results_ready.connect(self._on_review_results)
+        self._review_worker.error.connect(self._on_review_error)
+        self._review_worker.finished.connect(
+            lambda: self._reviews_btn.setEnabled(self._current_paper is not None)
+        )
+        self._review_worker.start()
+
+    def _on_review_results(self, notes: list) -> None:
+        self.statusBar().clearMessage()
+        ReviewDialog(self._current_paper, notes, parent=self).exec()
+
+    def _on_review_error(self, msg: str) -> None:
+        self.statusBar().showMessage(f"Error loading reviews: {msg}", 8000)
 
     def _on_download(self) -> None:
         from app.ranking import download
@@ -126,7 +157,8 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Download Error", str(e))
 
     def closeEvent(self, event) -> None:
-        if self._worker and self._worker.isRunning():
-            self._worker.quit()
-            self._worker.wait()
+        for worker in (self._worker, self._review_worker):
+            if worker and worker.isRunning():
+                worker.quit()
+                worker.wait()
         super().closeEvent(event)

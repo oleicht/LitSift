@@ -52,12 +52,10 @@ class WordWrapDelegate(QStyledItemDelegate):
         style = opt.widget.style() if opt.widget else QApplication.style()
         painter.save()
 
-        # Draw background (handles selection, alternating rows, hover, etc.)
         style.drawPrimitive(
             QStyle.PrimitiveElement.PE_PanelItemViewItem, opt, painter, opt.widget
         )
 
-        # Draw text with word wrap
         text = index.data(Qt.ItemDataRole.DisplayRole) or ""
         text_rect = opt.rect.adjusted(8, 6, -8, -6)
         color = (
