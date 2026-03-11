@@ -15,12 +15,9 @@ classifiers = [
 ]
 dependencies = [
     "numpy",
-    "pandas",
-    "pyarrow",
     "openreview-py",
     "tqdm",
     "voyageai",
-    "tokenizers",
     "PySide6",
     "jupyter>=1.1.1",
     "jupyterlab>=4.5.5",

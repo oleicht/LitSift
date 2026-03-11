@@ -15,10 +15,11 @@ class ReviewWorker(QThread):
         try:
             from app.ranking import get_data, get_reviews
             data = get_data()
-            match = data[data["title"] == self._paper.title]
-            if match.empty:
+            import polars as pl
+            match = data.filter(pl.col("title") == self._paper.title)
+            if match.is_empty():
                 self.error.emit("Paper not found in database.")
                 return
-            self.results_ready.emit(get_reviews(match["id"].iloc[0]))
+            self.results_ready.emit(get_reviews(match["id"][0]))
         except Exception as e:
             self.error.emit(str(e))
