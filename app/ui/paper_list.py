@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
 from PySide6.QtCore import QAbstractListModel, QModelIndex, QRect, QSize, Qt
-from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QListView,
@@ -60,7 +59,7 @@ class WordWrapDelegate(QStyledItemDelegate):
 
         # Draw text with word wrap
         text = index.data(Qt.ItemDataRole.DisplayRole) or ""
-        text_rect = opt.rect.adjusted(4, 2, -4, -2)
+        text_rect = opt.rect.adjusted(8, 6, -8, -6)
         color = (
             opt.palette.highlightedText().color()
             if opt.state & QStyle.StateFlag.State_Selected
@@ -72,30 +71,24 @@ class WordWrapDelegate(QStyledItemDelegate):
             Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
             text,
         )
+        painter.setPen(opt.palette.mid().color())
+        painter.drawLine(opt.rect.bottomLeft(), opt.rect.bottomRight())
         painter.restore()
 
     def sizeHint(self, option, index):
         text = index.data(Qt.ItemDataRole.DisplayRole) or ""
         width = self._view.viewport().width()
         rect = option.fontMetrics.boundingRect(
-            QRect(0, 0, max(width - 8, 1), 10000),
+            QRect(0, 0, max(width - 16, 1), 10000),
             Qt.TextFlag.TextWordWrap,
             text,
         )
-        return QSize(width, rect.height() + 8)
+        return QSize(width, rect.height() + 12)
 
 
 class PaperListView(QListView):
-    _COLOR_BASE = QColor("#f0f0f0")
-    _COLOR_ALT = QColor("#e0e0e0")
-
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setAlternatingRowColors(True)
-        palette = self.palette()
-        palette.setColor(QPalette.ColorRole.Base, self._COLOR_BASE)
-        palette.setColor(QPalette.ColorRole.AlternateBase, self._COLOR_ALT)
-        self.setPalette(palette)
         self.setItemDelegate(WordWrapDelegate(self, parent=self))
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setResizeMode(QListView.ResizeMode.Adjust)

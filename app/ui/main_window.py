@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextBlockFormat, QTextCursor
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -53,6 +54,7 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(QLabel("Abstract:"))
         self._abstract_view = QTextEdit()
         self._abstract_view.setReadOnly(True)
+        self._abstract_view.document().setDocumentMargin(10)
         right_layout.addWidget(self._abstract_view)
 
         self._download_btn = QPushButton("Download")
@@ -63,6 +65,11 @@ class MainWindow(QMainWindow):
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 2)
+
+        font = self.font()
+        font.setPointSize(font.pointSize() + 1)
+        self._view.setFont(font)
+        self._abstract_view.setFont(font)
 
         self.statusBar().showMessage("Ready")
 
@@ -95,6 +102,11 @@ class MainWindow(QMainWindow):
         self._current_paper = paper
         if paper is not None:
             self._abstract_view.setPlainText(paper.abstract)
+            fmt = QTextBlockFormat()
+            fmt.setLineHeight(140, QTextBlockFormat.LineHeightTypes.ProportionalHeight)
+            cursor = self._abstract_view.textCursor()
+            cursor.select(QTextCursor.SelectionType.Document)
+            cursor.mergeBlockFormat(fmt)
             self._download_btn.setEnabled(True)
         else:
             self._abstract_view.clear()
