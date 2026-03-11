@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "LitSift"
+version = "0.1.0"
+description = "Simple UI to find relevant papers"
+readme = "README.md"
+requires-python = ">=3.6"
+authors = [{ name = "Oliver Leicht", email = "oliverleicht@gmx.de" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "openreview-py",
+    "tqdm",
+    "voyageai",
+    "tokenizers",
+]
+
+[project.urls]
+Repository = "https://github.com/oleicht/LitSift"
+
+[project.scripts]
+lit-sift = "app.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
