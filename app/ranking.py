@@ -12,7 +12,7 @@ from tqdm import trange, tqdm
 
 config = json.load(open(Path(__file__).parent / "user.json"))
 
-if config["ranking"]["model"] == "voyage-large-2-instruct":
+if config["ranking"]["model"].startswith("voyage"):
     import voyageai
 
     vo = voyageai.Client(api_key=config["voyageai"]["secret"])
@@ -83,9 +83,11 @@ def generate_embeddings(model=None):
         lambda row: "Title: " + row.title + " Abstract: " + row.abstract, axis=1
     )
 
-    if config["ranking"]["model"] == "voyage-large-2-instruct":
+    if config["ranking"]["model"].startswith("voyage"):
         df = generate_voyageai_embeddings_robustly(
-            paper_strings, cached_embeddings_file
+            paper_strings,
+            cached_embeddings_file,
+            vo_model_str=config["ranking"]["model"],
         )
 
     elif config["ranking"]["model"] == "all-mpnet-base-v2":
@@ -101,9 +103,10 @@ def generate_embeddings(model=None):
     return df
 
 
-def generate_voyageai_embeddings_robustly(paper_strings, cached_embeddings_file):
+def generate_voyageai_embeddings_robustly(
+    paper_strings, cached_embeddings_file, vo_model_str
+):
     """Send small chunks to server and store them locally"""
-    vo_model_str = "voyage-large-2-instruct"
 
     text_blocks = []
     rc = 0
@@ -167,7 +170,7 @@ def get_rankings(query):
         latent_query = model.encode([query])
         qk = -model.similarity(latent_query, x_embeddings).numpy()[0]
 
-    elif config["ranking"]["model"] == "voyage-large-2-instruct":
+    elif config["ranking"]["model"].startswith("voyage"):
         embeddings = generate_embeddings()
         x_embeddings = embeddings[
             [c for c in embeddings.columns if c != "paper_strings"]
@@ -175,11 +178,11 @@ def get_rankings(query):
         paper_strings = embeddings[["paper_strings"]]
         latent_query = np.array(
             vo.embed(
-                [query], model="voyage-large-2-instruct", input_type="query"
+                [query], model=config["ranking"]["model"], input_type="query"
             ).embeddings,
             dtype=np.float32,
         )
-        # note: empirically, the voyage-ai embeddings seems to have norm=1
+        # empirically, the voyage-ai embeddings seems to have norm=1
         qk = (
             -latent_query
             @ x_embeddings.T
