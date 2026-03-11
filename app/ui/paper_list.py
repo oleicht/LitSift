@@ -1,8 +1,14 @@
 from dataclasses import dataclass
 
-from PySide6.QtCore import QAbstractListModel, QModelIndex, Qt, Signal
+from PySide6.QtCore import QAbstractListModel, QModelIndex, QRect, QSize, Qt
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QListView
+from PySide6.QtWidgets import (
+    QApplication,
+    QListView,
+    QStyle,
+    QStyleOptionViewItem,
+    QStyledItemDelegate,
+)
 
 
 @dataclass(frozen=True)
@@ -20,7 +26,7 @@ class PaperListModel(QAbstractListModel):
         return len(self._papers)
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
-        if not index.isValid() or not (0 <= index.row() < len(self._papers)):
+        if not index.isValid():
             return None
         paper = self._papers[index.row()]
         if role == Qt.ItemDataRole.DisplayRole:
@@ -35,9 +41,51 @@ class PaperListModel(QAbstractListModel):
         self.endResetModel()
 
 
-class PaperListView(QListView):
-    paper_activated = Signal(Paper)
+class WordWrapDelegate(QStyledItemDelegate):
+    def __init__(self, view: "PaperListView", parent=None):
+        super().__init__(parent)
+        self._view = view
 
+    def paint(self, painter, option, index):
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+
+        style = opt.widget.style() if opt.widget else QApplication.style()
+        painter.save()
+
+        # Draw background (handles selection, alternating rows, hover, etc.)
+        style.drawPrimitive(
+            QStyle.PrimitiveElement.PE_PanelItemViewItem, opt, painter, opt.widget
+        )
+
+        # Draw text with word wrap
+        text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        text_rect = opt.rect.adjusted(4, 2, -4, -2)
+        color = (
+            opt.palette.highlightedText().color()
+            if opt.state & QStyle.StateFlag.State_Selected
+            else opt.palette.text().color()
+        )
+        painter.setPen(color)
+        painter.drawText(
+            text_rect,
+            Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
+            text,
+        )
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        width = self._view.viewport().width()
+        rect = option.fontMetrics.boundingRect(
+            QRect(0, 0, max(width - 8, 1), 10000),
+            Qt.TextFlag.TextWordWrap,
+            text,
+        )
+        return QSize(width, rect.height() + 8)
+
+
+class PaperListView(QListView):
     _COLOR_BASE = QColor("#f0f0f0")
     _COLOR_ALT = QColor("#e0e0e0")
 
@@ -48,15 +96,10 @@ class PaperListView(QListView):
         palette.setColor(QPalette.ColorRole.Base, self._COLOR_BASE)
         palette.setColor(QPalette.ColorRole.AlternateBase, self._COLOR_ALT)
         self.setPalette(palette)
-        self.doubleClicked.connect(self._emit_paper)
+        self.setItemDelegate(WordWrapDelegate(self, parent=self))
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setResizeMode(QListView.ResizeMode.Adjust)
 
-    def keyPressEvent(self, event):
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            self._emit_paper(self.currentIndex())
-        else:
-            super().keyPressEvent(event)
-
-    def _emit_paper(self, index: QModelIndex) -> None:
-        paper = self.model().data(index, Qt.ItemDataRole.UserRole)
-        if paper is not None:
-            self.paper_activated.emit(paper)
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.scheduleDelayedItemsLayout()

@@ -1,14 +1,17 @@
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMessageBox,
     QPushButton,
+    QSplitter,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from app.ui.paper_detail import PaperDetailDialog
 from app.ui.paper_list import Paper, PaperListModel, PaperListView
 from app.ui.worker import RankingWorker
 
@@ -17,33 +20,49 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("LitSift")
-        self.resize(720, 800)
+        self.resize(1200, 700)
         self._worker: RankingWorker | None = None
         self._model = PaperListModel()
+        self._current_paper: Paper | None = None
         self._build_ui()
 
     def _build_ui(self) -> None:
-        central = QWidget()
-        self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.setCentralWidget(splitter)
 
-        layout.addWidget(QLabel("Enter your query:"))
+        self._view = PaperListView()
+        self._view.setModel(self._model)
+        self._view.selectionModel().currentChanged.connect(self._on_selection_changed)
+        self._model.modelReset.connect(self._on_model_reset)
+        splitter.addWidget(self._view)
 
+        right = QWidget()
+        right_layout = QVBoxLayout(right)
+
+        right_layout.addWidget(QLabel("Enter your query:"))
         query_row = QHBoxLayout()
         self._query_input = QLineEdit()
         self._query_input.setPlaceholderText("e.g. diffusion models for protein design")
         self._query_input.returnPressed.connect(self._on_submit)
         query_row.addWidget(self._query_input)
-
         self._submit_btn = QPushButton("Submit")
         self._submit_btn.clicked.connect(self._on_submit)
         query_row.addWidget(self._submit_btn)
-        layout.addLayout(query_row)
+        right_layout.addLayout(query_row)
 
-        self._view = PaperListView()
-        self._view.setModel(self._model)
-        self._view.paper_activated.connect(self._on_paper_activated)
-        layout.addWidget(self._view)
+        right_layout.addWidget(QLabel("Abstract:"))
+        self._abstract_view = QTextEdit()
+        self._abstract_view.setReadOnly(True)
+        right_layout.addWidget(self._abstract_view)
+
+        self._download_btn = QPushButton("Download")
+        self._download_btn.setEnabled(False)
+        self._download_btn.clicked.connect(self._on_download)
+        right_layout.addWidget(self._download_btn)
+
+        splitter.addWidget(right)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
 
         self.statusBar().showMessage("Ready")
 
@@ -71,8 +90,28 @@ class MainWindow(QMainWindow):
     def _on_error(self, msg: str) -> None:
         self.statusBar().showMessage(f"Error: {msg}", 8000)
 
-    def _on_paper_activated(self, paper: Paper) -> None:
-        PaperDetailDialog(paper, parent=self).exec()
+    def _on_selection_changed(self, current, previous) -> None:
+        paper = self._model.data(current, Qt.ItemDataRole.UserRole)
+        self._current_paper = paper
+        if paper is not None:
+            self._abstract_view.setPlainText(paper.abstract)
+            self._download_btn.setEnabled(True)
+        else:
+            self._abstract_view.clear()
+            self._download_btn.setEnabled(False)
+
+    def _on_model_reset(self) -> None:
+        self._current_paper = None
+        self._abstract_view.clear()
+        self._download_btn.setEnabled(False)
+
+    def _on_download(self) -> None:
+        from app.ranking import download
+        try:
+            download(self._current_paper.title)
+            QMessageBox.information(self, "Download", "Downloaded successfully.")
+        except Exception as e:
+            QMessageBox.critical(self, "Download Error", str(e))
 
     def closeEvent(self, event) -> None:
         if self._worker and self._worker.isRunning():
