@@ -1,4 +1,5 @@
 import json
+import warnings
 from functools import lru_cache
 from pathlib import Path
 import requests
@@ -21,31 +22,38 @@ client = openreview.api.OpenReviewClient(
     password=config["openreview"]["password"],
 )
 
+OVERVIEW_FILE = Path(__file__).parent / "cache" / "overview.parquet"
+
+
+def _venues_from_config() -> list[tuple[str, int, str]]:
+    return [(v["venue"], v["year"], v["track"]) for v in config["openreview"]["venues"]]
+
+
+def _venue_cache_dir(venue: str, year: int, track: str) -> Path:
+    safe_venue = venue.replace(".", "").replace("/", "-")
+    return Path(__file__).parent / "cache" / safe_venue / str(year) / track
+
 
 @lru_cache()
-def get_data():
-    venue_str = config["openreview"]["venue"].replace(".", "").replace("/", "-")
-    cached_data_file = Path(__file__).parent / "cache" / f"{venue_str}/papers.parquet"
-    cached_data_file.parent.mkdir(exist_ok=True, parents=True)
-    if cached_data_file.exists():
-        return pl.read_parquet(cached_data_file)
+def _load_overview() -> pl.DataFrame:
+    return pl.read_parquet(OVERVIEW_FILE)
 
-    all_papers = client.get_all_notes(
-        content={"venueid": config["openreview"]["venue"]}
+
+@lru_cache()
+def get_data(venue: str, year: int, track: str) -> pl.DataFrame:
+    df = _load_overview().filter(
+        (pl.col("venue") == venue) & (pl.col("year") == year) & (pl.col("track") == track)
     )
-    fields = ["title", "authors", "abstract", "venue", "pdf"]
-    extracted = [
-        (paper.to_json()["id"],)
-        + tuple(
-            paper.to_json()["content"].get(f, {"value": ["n/a"]})["value"]
-            for f in fields
+    if df.is_empty():
+        warnings.warn(
+            f"No papers found for venue='{venue}', year={year}, track='{track}'. "
+            "Check that this combination exists in the overview cache."
         )
-        for paper in all_papers
-    ]
-
-    df = pl.DataFrame(extracted, schema=["id"] + fields, orient="row")
-    df.write_parquet(cached_data_file)
     return df
+
+
+def get_all_data() -> pl.DataFrame:
+    return pl.concat([get_data(v, y, t) for v, y, t in _venues_from_config()])
 
 
 def get_reviews(paper_id: str):
@@ -53,23 +61,25 @@ def get_reviews(paper_id: str):
 
 
 @lru_cache()
-def generate_embeddings():
-    # ToDo: parametrise the option to include authors+institution here
-    venue_str = config["openreview"]["venue"].replace(".", "").replace("/", "-")
-    cached_embeddings_file = (
-        Path(__file__).parent
-        / "cache"
-        / f"{venue_str}/{config['ranking']['model']}-embeddings.parquet"
-    )
+def generate_embeddings(venue: str, year: int, track: str) -> pl.DataFrame:
+    cache_dir = _venue_cache_dir(venue, year, track)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cached_embeddings_file = cache_dir / f"{config['ranking']['model']}-embeddings.parquet"
+
     if cached_embeddings_file.exists():
         return pl.read_parquet(cached_embeddings_file)
 
-    data = get_data()
+    data = get_data(venue, year, track)
     paper_strings = [
-        f"Title: {t} Abstract: {a}"
-        for t, a in zip(data["title"].to_list(), data["abstract"].to_list())
+        f"Title: {t} Abstract: {a} TLDR: {tldr} Keywords: {', '.join(kws)}"
+        for t, a, tldr, kws in zip(
+            data["title"].to_list(),
+            data["abstract"].to_list(),
+            data["tldr"].to_list(),
+            data["keywords"].to_list(),
+        )
     ]
-    df = generate_voyageai_embeddings_robustly(
+    df = _generate_voyageai_embeddings_robustly(
         paper_strings,
         cached_embeddings_file,
         vo_model_str=config["ranking"]["model"],
@@ -78,11 +88,8 @@ def generate_embeddings():
     return df
 
 
-def generate_voyageai_embeddings_robustly(
-    paper_strings, cached_embeddings_file, vo_model_str
-):
-    """Send small chunks to server and store them locally"""
-
+def _generate_voyageai_embeddings_robustly(paper_strings, cached_embeddings_file, vo_model_str):
+    """Send small chunks to the VoyageAI API and store them locally as chunk files."""
     text_blocks = []
     rc = 0
     start = 0
@@ -114,7 +121,7 @@ def generate_voyageai_embeddings_robustly(
             )
             base.write_parquet(chunk_name)
         except Exception as e:
-            print(f"Problem with {i}")
+            print(f"Problem with chunk {i}")
             print(e)
 
     chunks = list(cached_embeddings_file.parent.glob("chunk_*.parquet"))
@@ -126,15 +133,15 @@ def generate_voyageai_embeddings_robustly(
     )
 
 
-def get_rankings(query):
-    embeddings = generate_embeddings()
+def get_rankings(query: str) -> list[tuple[str, str]]:
+    venues = _venues_from_config()
+    embeddings = pl.concat([generate_embeddings(v, y, t) for v, y, t in venues])
+
     paper_strings = embeddings["paper_strings"]
     emb_cols = [c for c in embeddings.columns if c.startswith("emb")]
     x_embeddings = embeddings.select(emb_cols).to_numpy().astype(np.float32)
     latent_query = np.array(
-        vo.embed(
-            [query], model=config["ranking"]["model"], input_type="query"
-        ).embeddings,
+        vo.embed([query], model=config["ranking"]["model"], input_type="query").embeddings,
         dtype=np.float32,
     )
     qk = (
@@ -144,35 +151,31 @@ def get_rankings(query):
     )[0]
 
     preferences = qk.argsort()
-    return [
-        (
-            s.split(" Abstract: ")[0][len("Title: "):],
-            s.split(" Abstract: ")[1],
-        )
-        for s in paper_strings[preferences.tolist()]
-        if s is not None
-    ]
+    results = []
+    for s in paper_strings[preferences.tolist()]:
+        if s is None:
+            continue
+        title = s.split(" Abstract: ")[0][len("Title: "):]
+        abstract = s.split(" Abstract: ")[1].split(" TLDR: ")[0]
+        results.append((title, abstract))
+    return results
 
 
-def download(paper_title):
-    venue_str = config["openreview"]["venue"].replace(".", "").replace("/", "-")
-    cached_data_file = Path(__file__).parent / "cache" / f"{venue_str}/downloads"
-    cached_data_file.mkdir(exist_ok=True)
-    file_on_disk = cached_data_file / f"""{paper_title}.pdf"""
+def download(paper_title: str) -> None:
+    data = get_all_data()
+    match = data.filter(pl.col("title") == paper_title)
+    if match.is_empty():
+        raise ValueError(f"Paper '{paper_title}' not found in any configured venue.")
+
+    row = match.row(0, named=True)
+    downloads_dir = _venue_cache_dir(row["venue"], row["year"], row["track"]) / "downloads"
+    downloads_dir.mkdir(exist_ok=True)
+
+    file_on_disk = downloads_dir / f"{paper_title}.pdf"
     if file_on_disk.exists():
         raise ValueError("Skip download. File already on disk")
 
-    data = get_data()
-    match = data.filter(pl.col("title") == paper_title)
-    assert len(match) == 1, match
     url = f"https://openreview.net/pdf?id={match['id'][0]}"
     response = requests.get(url)
-
     with open(file_on_disk, "wb") as f:
         f.write(response.content)
-
-
-if __name__ == "__main__":
-    df = get_data()
-    # get_rankings("Test")
-    # download("Rolling Diffusion Models")

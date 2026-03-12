@@ -149,7 +149,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Error loading reviews: {msg}", 8000)
 
     def _on_download(self) -> None:
-        from app.ranking import download
+        from app.backend import download
         try:
             download(self._current_paper.title)
             QMessageBox.information(self, "Download", "Downloaded successfully.")

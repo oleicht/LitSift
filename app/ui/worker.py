@@ -11,7 +11,7 @@ class RankingWorker(QThread):
 
     def run(self):
         try:
-            from app.ranking import get_rankings
+            from app.backend import get_rankings
             self.results_ready.emit(get_rankings(self._query))
         except Exception as e:
             self.error.emit(str(e))

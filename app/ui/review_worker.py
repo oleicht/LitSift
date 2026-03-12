@@ -13,8 +13,8 @@ class ReviewWorker(QThread):
 
     def run(self):
         try:
-            from app.ranking import get_data, get_reviews
-            data = get_data()
+            from app.backend import get_all_data, get_reviews
+            data = get_all_data()
             import polars as pl
             match = data.filter(pl.col("title") == self._paper.title)
             if match.is_empty():
