@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 class Paper:
     title: str
     abstract: str
+    tldr: str = "n/a"
 
 
 class PaperListModel(QAbstractListModel):

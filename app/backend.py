@@ -25,6 +25,25 @@ client = openreview.api.OpenReviewClient(
 OVERVIEW_FILE = Path(__file__).parent / "cache" / "overview.parquet"
 
 
+def get_available_venues() -> list[tuple[str, int, str, int]]:
+    """Return all (venue, year, track, paper_count) combos present in the overview."""
+    counts = (
+        _load_overview()
+        .group_by(["venue", "year", "track"])
+        .len()
+        .sort(["venue", "year", "track"])
+    )
+    return [(r["venue"], r["year"], r["track"], r["len"]) for r in counts.iter_rows(named=True)]
+
+
+def reload_config() -> None:
+    """Re-read user.json into the live config dict and clear per-venue caches."""
+    config.clear()
+    config.update(json.load(open(Path(__file__).parent / "user.json")))
+    get_data.cache_clear()
+    generate_embeddings.cache_clear()
+
+
 def _venues_from_config() -> list[tuple[str, int, str]]:
     return [(v["venue"], v["year"], v["track"]) for v in config["openreview"]["venues"]]
 
@@ -156,8 +175,11 @@ def get_rankings(query: str) -> list[tuple[str, str]]:
         if s is None:
             continue
         title = s.split(" Abstract: ")[0][len("Title: "):]
-        abstract = s.split(" Abstract: ")[1].split(" TLDR: ")[0]
-        results.append((title, abstract))
+        after_abstract = s.split(" Abstract: ")[1]
+        abstract = after_abstract.split(" TLDR: ")[0]
+        tldr_and_rest = after_abstract.split(" TLDR: ")
+        tldr = tldr_and_rest[1].split(" Keywords: ")[0] if len(tldr_and_rest) > 1 else "n/a"
+        results.append((title, abstract, tldr))
     return results
 
 

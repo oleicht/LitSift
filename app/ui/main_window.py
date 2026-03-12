@@ -34,11 +34,19 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.setCentralWidget(splitter)
 
+        left = QWidget()
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
         self._view = PaperListView()
         self._view.setModel(self._model)
         self._view.selectionModel().currentChanged.connect(self._on_selection_changed)
         self._model.modelReset.connect(self._on_model_reset)
-        splitter.addWidget(self._view)
+        left_layout.addWidget(self._view)
+        self._settings_btn = QPushButton("Settings")
+        self._settings_btn.clicked.connect(self._on_settings)
+        left_layout.addWidget(self._settings_btn)
+        splitter.addWidget(left)
 
         right = QWidget()
         right_layout = QVBoxLayout(right)
@@ -53,6 +61,13 @@ class MainWindow(QMainWindow):
         self._submit_btn.clicked.connect(self._on_submit)
         query_row.addWidget(self._submit_btn)
         right_layout.addLayout(query_row)
+
+        right_layout.addWidget(QLabel("TLDR:"))
+        self._tldr_view = QTextEdit()
+        self._tldr_view.setReadOnly(True)
+        self._tldr_view.document().setDocumentMargin(10)
+        self._tldr_view.setMaximumHeight(80)
+        right_layout.addWidget(self._tldr_view)
 
         right_layout.addWidget(QLabel("Abstract:"))
         self._abstract_view = QTextEdit()
@@ -77,6 +92,7 @@ class MainWindow(QMainWindow):
         font = self.font()
         font.setPointSize(font.pointSize() + 1)
         self._view.setFont(font)
+        self._tldr_view.setFont(font)
         self._abstract_view.setFont(font)
 
         self.statusBar().showMessage("Ready")
@@ -97,8 +113,7 @@ class MainWindow(QMainWindow):
         self._worker.finished.connect(lambda: self._submit_btn.setEnabled(True))
         self._worker.start()
 
-    def _on_results(self, results: list[tuple[str, str]]) -> None:
-        papers = [Paper(title, abstract) for title, abstract in results]
+    def _on_results(self, papers: list[Paper]) -> None:
         self._model.populate(papers)
         self.statusBar().showMessage(f"{len(papers)} papers ranked", 5000)
 
@@ -109,21 +124,25 @@ class MainWindow(QMainWindow):
         paper = self._model.data(current, Qt.ItemDataRole.UserRole)
         self._current_paper = paper
         if paper is not None:
+            self._tldr_view.setPlainText(paper.tldr)
             self._abstract_view.setPlainText(paper.abstract)
-            fmt = QTextBlockFormat()
-            fmt.setLineHeight(140.0, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
-            cursor = self._abstract_view.textCursor()
-            cursor.select(QTextCursor.SelectionType.Document)
-            cursor.mergeBlockFormat(fmt)
+            for view in (self._tldr_view, self._abstract_view):
+                fmt = QTextBlockFormat()
+                fmt.setLineHeight(140.0, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
+                cursor = view.textCursor()
+                cursor.select(QTextCursor.SelectionType.Document)
+                cursor.mergeBlockFormat(fmt)
             self._download_btn.setEnabled(True)
             self._reviews_btn.setEnabled(True)
         else:
+            self._tldr_view.clear()
             self._abstract_view.clear()
             self._download_btn.setEnabled(False)
             self._reviews_btn.setEnabled(False)
 
     def _on_model_reset(self) -> None:
         self._current_paper = None
+        self._tldr_view.clear()
         self._abstract_view.clear()
         self._download_btn.setEnabled(False)
         self._reviews_btn.setEnabled(False)
@@ -147,6 +166,10 @@ class MainWindow(QMainWindow):
 
     def _on_review_error(self, msg: str) -> None:
         self.statusBar().showMessage(f"Error loading reviews: {msg}", 8000)
+
+    def _on_settings(self) -> None:
+        from app.ui.settings_dialog import SettingsDialog
+        SettingsDialog(parent=self).exec()
 
     def _on_download(self) -> None:
         from app.backend import download
