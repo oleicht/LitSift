@@ -207,6 +207,8 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Error: {msg}", 8000)
 
     def _on_reviews(self) -> None:
+        if not self._papers:
+            return
         if self._review_worker and self._review_worker.isRunning():
             return
         self._reviews_btn.setEnabled(False)
@@ -220,9 +222,9 @@ class MainWindow(QMainWindow):
         )
         self._review_worker.start()
 
-    def _on_review_results(self, notes: list) -> None:
+    def _on_review_results(self, paper: Paper, notes: list) -> None:
         self.statusBar().clearMessage()
-        ReviewDialog(self._papers[self._idx], notes, parent=self).exec()
+        ReviewDialog(paper, notes, parent=self).exec()
 
     def _on_review_error(self, msg: str) -> None:
         self.statusBar().showMessage(f"Error loading reviews: {msg}", 8000)
@@ -232,6 +234,8 @@ class MainWindow(QMainWindow):
         SettingsDialog(parent=self).exec()
 
     def _on_download(self) -> None:
+        if not self._papers:
+            return
         from app.backend import download
         try:
             download(self._papers[self._idx].title)

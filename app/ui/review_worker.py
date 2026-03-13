@@ -4,7 +4,7 @@ from app.ui.paper import Paper
 
 
 class ReviewWorker(QThread):
-    results_ready = Signal(list)
+    results_ready = Signal(object, list)
     error = Signal(str)
 
     def __init__(self, paper: Paper, parent=None):
@@ -14,6 +14,6 @@ class ReviewWorker(QThread):
     def run(self):
         try:
             from app.backend import get_reviews
-            self.results_ready.emit(get_reviews(self._paper.id))
+            self.results_ready.emit(self._paper, get_reviews(self._paper.id))
         except Exception as e:
             self.error.emit(str(e))

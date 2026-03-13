@@ -1,16 +1,9 @@
 {
     "openreview": {
         "username": "user@provider",
-        "password": "password",
-        "venues": [
-            {"venue": "ICML.cc", "year": 2025, "track": "conference"},
-            {"venue": "ICML.cc", "year": 2025, "track": "workshop"}
-        ]
+        "password": "password"
     },
     "voyageai": {
         "secret": "top_secret"
-    },
-    "ranking": {
-        "model": "voyage-3"
     }
 }

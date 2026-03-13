@@ -1,12 +1,10 @@
-import json
-from pathlib import Path
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QGroupBox,
-    QLabel,
+    QHBoxLayout,
+    QPushButton,
     QListWidget,
     QListWidgetItem,
     QVBoxLayout,
@@ -21,17 +19,22 @@ class SettingsDialog(QDialog):
         self._build_ui()
 
     def _build_ui(self):
-        from app.backend import config, get_available_venues
+        from app.backend import get_available_venues, get_selected_venues
 
         layout = QVBoxLayout(self)
 
         venue_group = QGroupBox("Venues")
         venue_layout = QVBoxLayout(venue_group)
+
+        select_row = QHBoxLayout()
+        select_all_btn = QPushButton("Select All")
+        select_all_btn.clicked.connect(self._select_all)
+        select_row.addWidget(select_all_btn)
+        select_row.addStretch()
+        venue_layout.addLayout(select_row)
+
         self._venue_list = QListWidget()
-        selected = {
-            (v["venue"], v["year"], v["track"])
-            for v in config["openreview"]["venues"]
-        }
+        selected = set(get_selected_venues())
         for venue, year, track, count in get_available_venues():
             item = QListWidgetItem(f"{venue}  {year}  —  {track}  ({count:,} papers)")
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
@@ -45,11 +48,6 @@ class SettingsDialog(QDialog):
         venue_layout.addWidget(self._venue_list)
         layout.addWidget(venue_group)
 
-        model_group = QGroupBox("Embedding Model")
-        model_layout = QVBoxLayout(model_group)
-        model_layout.addWidget(QLabel(config["ranking"]["model"]))
-        layout.addWidget(model_group)
-
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -57,20 +55,17 @@ class SettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+    def _select_all(self):
+        for i in range(self._venue_list.count()):
+            self._venue_list.item(i).setCheckState(Qt.CheckState.Checked)
+
     def _save(self):
-        from app.backend import config, reload_config
+        from app.backend import set_selected_venues
 
         selected = []
         for i in range(self._venue_list.count()):
             item = self._venue_list.item(i)
             if item.checkState() == Qt.CheckState.Checked:
-                venue, year, track = item.data(Qt.ItemDataRole.UserRole)
-                selected.append({"venue": venue, "year": year, "track": track})
-
-        config["openreview"]["venues"] = selected
-        user_json_path = Path(__file__).parent.parent / "user.json"
-        with open(user_json_path, "w") as f:
-            json.dump(config, f, indent=4)
-
-        reload_config()
+                selected.append(item.data(Qt.ItemDataRole.UserRole))
+        set_selected_venues(selected)
         self.accept()

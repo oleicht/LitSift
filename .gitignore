@@ -109,3 +109,4 @@ assets/
 # project specific
 app/cache
 user.json
+scraping_logs.txt
