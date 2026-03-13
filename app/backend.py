@@ -27,10 +27,18 @@ client = openreview.api.OpenReviewClient(
     password=config["openreview"]["password"],
 )
 
+# for older conferences, need to use the apiv1
+# it needs be called this way here
+# legacy_client = openreview.Client(
+#         baseurl="https://api.openreview.net",
+#         username=config["openreview"]["username"],
+#         password=config["openreview"]["password"],
+# )
+
 OVERVIEW_FILE = Path(__file__).parent / "cache" / "overview.parquet"
 _LOG_FILE = Path(__file__).parent.parent / "scraping_logs.txt"
 _EMBEDDING_MODEL = "voyage-3"
-_FILENAME_UNSAFE = re.compile(r'[^\w\s\-.]')
+_FILENAME_UNSAFE = re.compile(r"[^\w\s\-.]")
 
 _CONFERENCES = [
     "ICML.cc",
@@ -55,7 +63,9 @@ def _scrape_log() -> logging.Logger:
     logger = logging.getLogger("litsift.scraping")
     if not logger.handlers:
         handler = logging.FileHandler(_LOG_FILE)
-        handler.setFormatter(logging.Formatter("%(asctime)s  %(levelname)s  %(message)s"))
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s  %(levelname)s  %(message)s")
+        )
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
     return logger
@@ -71,10 +81,14 @@ def _safe_get(content: dict, field: str):
     if field == "keywords":
         return ["n/a"]
     if field == "pdf":
-        _scrape_log().warning("Missing pdf in: %s", content.get("venue", {}).get("value", "?"))
+        _scrape_log().warning(
+            "Missing pdf in: %s", content.get("venue", {}).get("value", "?")
+        )
         return "n/a"
     if field == "abstract":
-        _scrape_log().warning("Missing abstract in: %s", content.get("venue", {}).get("value", "?"))
+        _scrape_log().warning(
+            "Missing abstract in: %s", content.get("venue", {}).get("value", "?")
+        )
         return "n/a"
     raise ValueError(f"Key {field} unexpectedly not in content")
 
@@ -101,7 +115,9 @@ def _discover_venues() -> list[_Venue]:
         conference_years: set[str] = set()
         workshops: dict[str, set[str]] = defaultdict(set)
         for g in groups:
-            ws_match = re.findall(rf"{re.escape(prefix)}/(20\d\d)/Workshop/([^/]*)", g.id)
+            ws_match = re.findall(
+                rf"{re.escape(prefix)}/(20\d\d)/Workshop/([^/]*)", g.id
+            )
             conf_match = re.findall(rf"{re.escape(prefix)}/(20\d\d)/Conference", g.id)
             if ws_match:
                 year, name = ws_match[0]
@@ -110,7 +126,11 @@ def _discover_venues() -> list[_Venue]:
                 conference_years.add(conf_match[0])
         sorted_workshops = {k: sorted(v) for k, v in workshops.items()}
         for year in conference_years:
-            venues.append(_Venue(name=prefix, year=int(year), workshops=sorted_workshops.get(year)))
+            venues.append(
+                _Venue(
+                    name=prefix, year=int(year), workshops=sorted_workshops.get(year)
+                )
+            )
     return venues
 
 
@@ -126,7 +146,9 @@ def _build_overview() -> pl.DataFrame:
             continue
         pk = (venue.name, venue.year, "conference")
         rows.extend(pk + _paper_to_row(paper) for paper in main)
-        log.info("Fetched %d papers from %s/%s conference", len(main), venue.name, venue.year)
+        log.info(
+            "Fetched %d papers from %s/%s conference", len(main), venue.name, venue.year
+        )
 
         workshop_notes = []
         if venue.workshops:
@@ -136,11 +158,28 @@ def _build_overview() -> pl.DataFrame:
         if workshop_notes:
             pk = (venue.name, venue.year, "workshop")
             rows.extend(pk + _paper_to_row(paper) for paper in workshop_notes)
-            log.info("Fetched %d workshop papers from %s/%s", len(workshop_notes), venue.name, venue.year)
+            log.info(
+                "Fetched %d workshop papers from %s/%s",
+                len(workshop_notes),
+                venue.name,
+                venue.year,
+            )
 
     return pl.DataFrame(
         rows,
-        schema=["venue", "year", "track", "id", "title", "authors", "abstract", "name", "link", "tldr", "keywords"],
+        schema=[
+            "venue",
+            "year",
+            "track",
+            "id",
+            "title",
+            "authors",
+            "abstract",
+            "name",
+            "link",
+            "tldr",
+            "keywords",
+        ],
         orient="row",
     )
 
@@ -153,7 +192,10 @@ def get_available_venues() -> list[tuple[str, int, str, int]]:
         .len()
         .sort(["venue", "year", "track"])
     )
-    return [(r["venue"], r["year"], r["track"], r["len"]) for r in counts.iter_rows(named=True)]
+    return [
+        (r["venue"], r["year"], r["track"], r["len"])
+        for r in counts.iter_rows(named=True)
+    ]
 
 
 _selected_venues: list[tuple[str, int, str]] | None = None
@@ -193,7 +235,9 @@ def _load_overview() -> pl.DataFrame:
 @lru_cache()
 def get_data(venue: str, year: int, track: str) -> pl.DataFrame:
     df = _load_overview().filter(
-        (pl.col("venue") == venue) & (pl.col("year") == year) & (pl.col("track") == track)
+        (pl.col("venue") == venue)
+        & (pl.col("year") == year)
+        & (pl.col("track") == track)
     )
     if df.is_empty():
         warnings.warn(
@@ -246,7 +290,9 @@ def generate_embeddings(venue: str, year: int, track: str) -> pl.DataFrame:
     return df
 
 
-def _generate_voyageai_embeddings_robustly(paper_strings, cached_embeddings_file, vo_model_str):
+def _generate_voyageai_embeddings_robustly(
+    paper_strings, cached_embeddings_file, vo_model_str
+):
     """Send small chunks to the VoyageAI API and store them locally as chunk files."""
     text_blocks = []
     rc = 0
@@ -265,9 +311,13 @@ def _generate_voyageai_embeddings_robustly(paper_strings, cached_embeddings_file
         if chunk_name.exists():
             disk_chunk = pl.read_parquet(chunk_name)
             if disk_chunk["title_abstract"].to_list() != papers:
-                raise ValueError(f"Chunk {i} content mismatch — delete the cache directory and retry")
+                raise ValueError(
+                    f"Chunk {i} content mismatch — delete the cache directory and retry"
+                )
             if disk_chunk["range"].to_list() != list(range(*tb)):
-                raise ValueError(f"Chunk {i} range mismatch — delete the cache directory and retry")
+                raise ValueError(
+                    f"Chunk {i} range mismatch — delete the cache directory and retry"
+                )
             continue
         res = vo.embed(papers, model=vo_model_str, input_type="document")
         base = pl.DataFrame(
@@ -314,7 +364,9 @@ def get_rankings(query: str) -> list[tuple]:
         / (norm(x_embeddings, axis=1) * norm(latent_query, axis=1))
     )[0]
 
-    score_df = pl.DataFrame({"id": embeddings["id"].to_list(), "score": scores.tolist()})
+    score_df = pl.DataFrame(
+        {"id": embeddings["id"].to_list(), "score": scores.tolist()}
+    )
     merged = data.join(score_df, on="id", how="inner").sort("score", descending=True)
 
     return [
@@ -338,7 +390,9 @@ def download(paper_title: str) -> None:
         raise ValueError(f"Paper '{paper_title}' not found in any configured venue.")
 
     row = match.row(0, named=True)
-    downloads_dir = _venue_cache_dir(row["venue"], row["year"], row["track"]) / "downloads"
+    downloads_dir = (
+        _venue_cache_dir(row["venue"], row["year"], row["track"]) / "downloads"
+    )
     downloads_dir.mkdir(exist_ok=True)
 
     safe_title = _FILENAME_UNSAFE.sub("", paper_title).strip()[:200]
