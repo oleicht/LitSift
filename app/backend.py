@@ -37,7 +37,7 @@ client = openreview.api.OpenReviewClient(
 
 OVERVIEW_FILE = Path(__file__).parent / "cache" / "overview.parquet"
 _LOG_FILE = Path(__file__).parent.parent / "scraping_logs.txt"
-_EMBEDDING_MODEL = "voyage-3"
+_EMBEDDING_MODEL = "voyage-4"
 _FILENAME_UNSAFE = re.compile(r"[^\w\s\-.]")
 
 _CONFERENCES = [
