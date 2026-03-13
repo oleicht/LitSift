@@ -12,7 +12,7 @@ import voyageai
 from tqdm import tqdm
 
 
-config = json.load(open(Path(__file__).parent / "user.json"))
+config = json.loads((Path(__file__).parent / "user.json").read_text())
 
 vo = voyageai.Client(api_key=config["voyageai"]["secret"])
 
@@ -39,7 +39,7 @@ def get_available_venues() -> list[tuple[str, int, str, int]]:
 def reload_config() -> None:
     """Re-read user.json into the live config dict and clear per-venue caches."""
     config.clear()
-    config.update(json.load(open(Path(__file__).parent / "user.json")))
+    config.update(json.loads((Path(__file__).parent / "user.json").read_text()))
     get_data.cache_clear()
     generate_embeddings.cache_clear()
 
@@ -152,34 +152,38 @@ def _generate_voyageai_embeddings_robustly(paper_strings, cached_embeddings_file
     )
 
 
-def get_rankings(query: str) -> list[tuple[str, str]]:
+def get_rankings(query: str) -> list[tuple]:
     venues = _venues_from_config()
     embeddings = pl.concat([generate_embeddings(v, y, t) for v, y, t in venues])
+    data = get_all_data()
 
-    paper_strings = embeddings["paper_strings"]
     emb_cols = [c for c in embeddings.columns if c.startswith("emb")]
     x_embeddings = embeddings.select(emb_cols).to_numpy().astype(np.float32)
     latent_query = np.array(
         vo.embed([query], model=config["ranking"]["model"], input_type="query").embeddings,
         dtype=np.float32,
     )
-    qk = (
-        -latent_query
+    scores = (
+        latent_query
         @ x_embeddings.T
         / (norm(x_embeddings, axis=1) * norm(latent_query, axis=1))
     )[0]
 
-    preferences = qk.argsort()
+    preferences = (-scores).argsort()
+    # Both get_all_data() and the embeddings concatenate venues in _venues_from_config()
+    # order, so index i in embeddings corresponds to index i in data.
     results = []
-    for s in paper_strings[preferences.tolist()]:
-        if s is None:
-            continue
-        title = s.split(" Abstract: ")[0][len("Title: "):]
-        after_abstract = s.split(" Abstract: ")[1]
-        abstract = after_abstract.split(" TLDR: ")[0]
-        tldr_and_rest = after_abstract.split(" TLDR: ")
-        tldr = tldr_and_rest[1].split(" Keywords: ")[0] if len(tldr_and_rest) > 1 else "n/a"
-        results.append((title, abstract, tldr))
+    for idx in preferences.tolist():
+        row = data.row(idx, named=True)
+        results.append((
+            row["title"],
+            row["abstract"],
+            row["tldr"],
+            tuple(row["authors"]),
+            row["name"],
+            float(scores[idx]),
+            row["id"],
+        ))
     return results
 
 

@@ -1,6 +1,6 @@
 from PySide6.QtCore import QThread, Signal
 
-from app.ui.paper_list import Paper
+from app.ui.paper import Paper
 
 
 class ReviewWorker(QThread):
@@ -13,13 +13,7 @@ class ReviewWorker(QThread):
 
     def run(self):
         try:
-            from app.backend import get_all_data, get_reviews
-            data = get_all_data()
-            import polars as pl
-            match = data.filter(pl.col("title") == self._paper.title)
-            if match.is_empty():
-                self.error.emit("Paper not found in database.")
-                return
-            self.results_ready.emit(get_reviews(match["id"][0]))
+            from app.backend import get_reviews
+            self.results_ready.emit(get_reviews(self._paper.id))
         except Exception as e:
             self.error.emit(str(e))

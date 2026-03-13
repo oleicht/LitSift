@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from app.ui.paper_list import Paper
+from app.ui.paper import Paper
 
 _SCORE_FIELDS = {
     "rating", "overall_recommendation", "confidence",

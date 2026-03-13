@@ -12,10 +12,10 @@ class RankingWorker(QThread):
     def run(self):
         try:
             from app.backend import get_rankings
-            from app.ui.paper_list import Paper
+            from app.ui.paper import Paper
             self.results_ready.emit([
-                Paper(title, abstract, tldr)
-                for title, abstract, tldr in get_rankings(self._query)
+                Paper(title, abstract, tldr, authors, name, score, id)
+                for title, abstract, tldr, authors, name, score, id in get_rankings(self._query)
             ])
         except Exception as e:
             self.error.emit(str(e))
