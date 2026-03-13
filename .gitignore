@@ -110,3 +110,5 @@ assets/
 app/cache
 user.json
 scraping_logs.txt
+notebooks
+uv.lock

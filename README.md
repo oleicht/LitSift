@@ -14,5 +14,5 @@ Simple app that allows to interact with conference papers. At its heart, it reli
 ## Navigation
 
 - navigate the papers with right/left arrows
-- download short-cut is `d`, papers are stored in app/cache/{conference}/downloads
+- download short-cut is `d`, papers are stored in ./downloads
 - view review/rebuttal via shortcut `r` or the review button. The pop-up can be closed with `Esc`

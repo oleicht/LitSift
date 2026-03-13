@@ -84,6 +84,10 @@ class MainWindow(QMainWindow):
         # Title
         self._title_label = QLabel("")
         self._title_label.setWordWrap(True)
+        self._title_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
         title_font = self._title_label.font()
         title_font.setPointSize(title_font.pointSize() + 3)
         title_font.setBold(True)

@@ -389,10 +389,7 @@ def download(paper_title: str) -> None:
     if match.is_empty():
         raise ValueError(f"Paper '{paper_title}' not found in any configured venue.")
 
-    row = match.row(0, named=True)
-    downloads_dir = (
-        _venue_cache_dir(row["venue"], row["year"], row["track"]) / "downloads"
-    )
+    downloads_dir = Path(__file__).parent.parent / "downloads"
     downloads_dir.mkdir(exist_ok=True)
 
     safe_title = _FILENAME_UNSAFE.sub("", paper_title).strip()[:200]
